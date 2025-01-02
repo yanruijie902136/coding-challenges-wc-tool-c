@@ -1,6 +1,8 @@
+#include <ctype.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -11,6 +13,7 @@ enum count_mode
 {
         COUNT_BYTES = 0x01,
         COUNT_LINES = 0x02,
+        COUNT_WORDS = 0x04,
 };
 
 struct input_args
@@ -21,7 +24,7 @@ struct input_args
 
 static void print_usage_and_exit(void)
 {
-        fprintf(stderr, "usage: ccwc [-cl] file ...\n");
+        fprintf(stderr, "usage: ccwc [-clw] file ...\n");
         exit(EXIT_FAILURE);
 }
 
@@ -31,7 +34,7 @@ static struct input_args check_usage(int argc, char *const argv[])
         args.modes = 0;
 
         int opt;
-        while ( (opt = getopt(argc, argv, ":cl")) != -1)
+        while ( (opt = getopt(argc, argv, ":clw")) != -1)
         {
                 switch (opt)
                 {
@@ -40,6 +43,9 @@ static struct input_args check_usage(int argc, char *const argv[])
                         break;
                 case 'l':
                         args.modes |= COUNT_LINES;
+                        break;
+                case 'w':
+                        args.modes |= COUNT_WORDS;
                         break;
                 case '?':
                         warnx("unrecognized option -- %c", optopt);
@@ -54,7 +60,7 @@ static struct input_args check_usage(int argc, char *const argv[])
         }
         if (args.modes == 0)
         {
-                args.modes = COUNT_BYTES | COUNT_LINES;
+                args.modes = COUNT_BYTES | COUNT_LINES | COUNT_WORDS;
         }
 
         return args;
@@ -71,7 +77,8 @@ static void report_file(const char *file, int modes)
         }
 
         static char buffer[BUFSIZ];
-        size_t nbytes = 0, nlines = 0;
+        char prevch = ' ';
+        size_t nbytes = 0, nlines = 0, nwords = 0;
         for ( ; ; )
         {
                 ssize_t nr = read(fd, buffer, sizeof(buffer));
@@ -94,12 +101,21 @@ static void report_file(const char *file, int modes)
                         {
                                 nlines++;
                         }
+                        if (isspace(prevch) && !isspace(buffer[i]))
+                        {
+                                nwords++;
+                        }
+                        prevch = buffer[i];
                 }
         }
 
         if (modes & COUNT_LINES)
         {
                 printf("%zu ", nlines);
+        }
+        if (modes & COUNT_WORDS)
+        {
+                printf("%zu ", nwords);
         }
         if (modes & COUNT_BYTES)
         {
